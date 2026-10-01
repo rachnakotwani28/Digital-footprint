@@ -23,6 +23,7 @@ import { InventoryManager } from './components/InventoryManager';
 import { FixChecklist } from './components/FixChecklist';
 import { BreachSimulatorModal } from './components/BreachSimulatorModal';
 import { ReviewReminders } from './components/ReviewReminders';
+import { CrownJewelIsolationView } from './components/CrownJewelIsolationView';
 
 import { 
   ShieldAlert, 
@@ -32,10 +33,11 @@ import {
   Flame, 
   RotateCcw, 
   Download, 
-  Lock
+  Lock,
+  ShieldCheck
 } from 'lucide-react';
 
-type ActiveTab = 'dashboard' | 'graph' | 'inventory' | 'checklist' | 'breach_alerts';
+type ActiveTab = 'dashboard' | 'graph' | 'inventory' | 'checklist' | 'isolation_blueprint' | 'breach_alerts';
 
 export const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<ActiveTab>('dashboard');
@@ -206,6 +208,13 @@ export const App: React.FC = () => {
             <ShieldAlert size={16} /> Fix Checklist ({prioritizedActions.filter((a) => !completedActionIds.includes(a.id)).length})
           </button>
           <button
+            id="tab-isolation"
+            onClick={() => setActiveTab('isolation_blueprint')}
+            className={`nav-tab-btn ${activeTab === 'isolation_blueprint' ? 'active' : ''}`}
+          >
+            <ShieldCheck size={16} /> Identity Tiers & Aliases
+          </button>
+          <button
             id="tab-alerts"
             onClick={() => setActiveTab('breach_alerts')}
             className={`nav-tab-btn ${activeTab === 'breach_alerts' ? 'active' : ''}`}
@@ -298,6 +307,14 @@ export const App: React.FC = () => {
             actions={prioritizedActions}
             completedActionIds={completedActionIds}
             onApplyFix={handleApplyFix}
+          />
+        )}
+
+        {activeTab === 'isolation_blueprint' && (
+          <CrownJewelIsolationView
+            accounts={accounts}
+            onUpdateAccounts={handleUpdateAccounts}
+            onOpenBreachSimulator={handleOpenBreachSimulator}
           />
         )}
 

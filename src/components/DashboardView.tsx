@@ -12,7 +12,10 @@ import {
   TrendingUp, 
   Zap, 
   Flame,
-  ChevronRight
+  ChevronRight,
+  Sparkles,
+  TrendingDown,
+  GitFork
 } from 'lucide-react';
 
 interface DashboardViewProps {
@@ -31,6 +34,7 @@ interface DashboardViewProps {
 export const DashboardView: React.FC<DashboardViewProps> = ({
   metrics,
   network,
+  topActions = [],
   scoreHistory,
   selectedNodeId,
   onSelectNode,
@@ -43,6 +47,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
     .slice(0, 3);
 
   const spofNodes = network.nodes.filter((n) => n.isSPOF);
+  const highestRoiAction = topActions.find((a) => !a.isCompleted) || topActions[0];
 
   const getScoreColor = (score: number) => {
     if (score >= 80) return '#10b981';
@@ -260,6 +265,88 @@ export const DashboardView: React.FC<DashboardViewProps> = ({
             className="btn-danger btn-sm"
           >
             <Flame size={14} /> Simulate SPOF Cascade Breach
+          </button>
+        </div>
+      )}
+
+      {/* Highest Marginal ROI Action Hero Showcase (USP #2) */}
+      {highestRoiAction && !highestRoiAction.isCompleted && (
+        <div
+          className="glass-panel"
+          style={{
+            padding: '20px 24px',
+            background: 'linear-gradient(135deg, rgba(6, 182, 212, 0.1) 0%, rgba(15, 23, 42, 0.8) 100%)',
+            border: '1px solid rgba(6, 182, 212, 0.35)',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+            gap: 16,
+          }}
+        >
+          <div style={{ maxWidth: '760px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
+              <span className="badge badge-cyan" style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                <Sparkles size={12} /> #1 Ranked Action (Marginal Risk Optimization)
+              </span>
+              <span
+                className="badge"
+                style={{
+                  background: 'rgba(244, 63, 94, 0.18)',
+                  color: '#fb7185',
+                  border: '1px solid rgba(244, 63, 94, 0.35)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 4,
+                }}
+              >
+                <TrendingDown size={12} /> -{highestRoiAction.relativeRiskReductionPercentage}% Total Network Risk
+              </span>
+              <span
+                className="badge"
+                style={{
+                  background: 'rgba(16, 185, 129, 0.15)',
+                  color: '#10b981',
+                  border: '1px solid rgba(16, 185, 129, 0.3)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 4,
+                }}
+              >
+                <GitFork size={12} /> {highestRoiAction.severedAttackPathsCount} Paths Severed
+              </span>
+            </div>
+
+            <h4 style={{ fontSize: '1.08rem', fontWeight: 700, color: '#fff', marginTop: 4 }}>
+              {highestRoiAction.title}
+            </h4>
+
+            <div
+              style={{
+                fontSize: '0.84rem',
+                color: '#e2e8f0',
+                marginTop: 6,
+                background: 'rgba(255, 255, 255, 0.04)',
+                padding: '8px 12px',
+                borderRadius: 'var(--radius-sm)',
+                borderLeft: '3px solid var(--accent-cyan)',
+                fontStyle: 'italic',
+              }}
+            >
+              "{highestRoiAction.mathematicalProofRationale}"
+            </div>
+          </div>
+
+          <button
+            onClick={onNavigateToFixes}
+            className="btn-primary"
+            style={{
+              background: 'linear-gradient(135deg, #06b6d4 0%, #10b981 100%)',
+              whiteSpace: 'nowrap',
+              boxShadow: '0 4px 14px rgba(6, 182, 212, 0.25)',
+            }}
+          >
+            <Zap size={15} /> Resolve in Queue
           </button>
         </div>
       )}

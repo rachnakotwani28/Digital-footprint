@@ -11,7 +11,13 @@ import {
   Zap, 
   Info, 
   X, 
-  Shield
+  Shield,
+  TrendingDown,
+  GitFork,
+  Check,
+  ChevronDown,
+  ChevronUp,
+  Activity
 } from 'lucide-react';
 
 interface FixChecklistProps {
@@ -28,6 +34,8 @@ export const FixChecklist: React.FC<FixChecklistProps> = ({
 }) => {
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL');
   const [activeGuideAction, setActiveGuideAction] = useState<RemediationAction | null>(null);
+  const [expandedDiffActionId, setExpandedDiffActionId] = useState<string | null>(null);
+  const [showParetoDetails, setShowParetoDetails] = useState<boolean>(true);
 
   const pendingActions = actions.filter((a) => !completedActionIds.includes(a.id));
   const completedActions = actions.filter((a) => completedActionIds.includes(a.id));
@@ -42,7 +50,17 @@ export const FixChecklist: React.FC<FixChecklistProps> = ({
   const completedCount = completedActions.length;
   const completionPercentage = totalActions > 0 ? Math.round((completedCount / totalActions) * 100) : 100;
 
-  const potentialScoreJump = pendingActions.reduce((sum, a) => sum + a.impactScore, 0);
+  // Top 3 cumulative risk reduction calculation
+  const top3Actions = pendingActions.slice(0, 3);
+  const top3CumulativeReductionPct = Math.min(
+    95,
+    top3Actions.reduce((sum, a) => sum + a.relativeRiskReductionPercentage, 0)
+  );
+
+  const totalSeveredVectors = pendingActions.reduce(
+    (sum, a) => sum + (a.severedAttackPathsCount || 1),
+    0
+  );
 
   const handleFixClick = (action: RemediationAction) => {
     confetti({
@@ -85,35 +103,65 @@ export const FixChecklist: React.FC<FixChecklistProps> = ({
     }
   };
 
+  const getRoiBadgeStyle = (tier: string) => {
+    switch (tier) {
+      case 'MAX_IMPACT':
+        return {
+          background: 'linear-gradient(135deg, rgba(244, 63, 94, 0.25) 0%, rgba(236, 72, 153, 0.15) 100%)',
+          border: '1px solid rgba(244, 63, 94, 0.4)',
+          color: '#fb7185',
+        };
+      case 'HIGH_ROI':
+        return {
+          background: 'linear-gradient(135deg, rgba(245, 158, 11, 0.25) 0%, rgba(217, 119, 6, 0.15) 100%)',
+          border: '1px solid rgba(245, 158, 11, 0.4)',
+          color: '#fbbf24',
+        };
+      case 'MODERATE':
+        return {
+          background: 'rgba(6, 182, 212, 0.15)',
+          border: '1px solid rgba(6, 182, 212, 0.3)',
+          color: '#38bdf8',
+        };
+      default:
+        return {
+          background: 'rgba(255, 255, 255, 0.05)',
+          border: '1px solid rgba(255, 255, 255, 0.1)',
+          color: 'var(--text-secondary)',
+        };
+    }
+  };
+
   const getGuidanceSteps = (action: RemediationAction) => {
     switch (action.category) {
       case 'enable_2fa':
         return [
-          `Log in to your ${action.accountName} account settings.`,
-          'Navigate to "Security" or "Sign-in Options".',
+          `Log in to your ${action.accountName} security dashboard.`,
+          'Navigate to "Security" or "Sign-in & Recovery Options".',
           'Locate "2-Step Verification" / "Two-Factor Authentication".',
-          'Choose "Authenticator App" (e.g. Google Authenticator, Bitwarden, or 1Password) or a Hardware Security Key (YubiKey).',
-          'Scan the QR code and verify the 6-digit confirmation code.',
+          'Select "Authenticator App" (e.g. Google Authenticator, Bitwarden, or 1Password) or a Hardware Security Key (YubiKey).',
+          'Scan the QR code and verify the 6-digit one-time confirmation token.',
+          'Save backup recovery codes in a secure, isolated vault.',
         ];
       case 'isolate_password':
         return [
-          `Open your password manager and generate a strong, unique 20+ character random password.`,
-          `Log in to ${action.accountName} and go to "Account Settings" > "Change Password".`,
-          'Replace the shared password with your new unique password.',
-          'Ensure this password is not used for any other account or email inbox.',
+          `Open your password manager and generate a high-entropy, unique 20+ character random password.`,
+          `Log in to ${action.accountName} and navigate to "Account Settings" > "Change Password".`,
+          'Replace the shared password with your newly generated isolated password.',
+          'Verify that no other service shares this credential.',
         ];
       case 'revoke_permission':
         return [
-          `Open your mobile device Settings (iOS or Android).`,
+          `Open your device Settings (or cloud OAuth authorizations for ${action.accountName}).`,
           `Navigate to "Apps" > "${action.accountName}" > "Permissions".`,
-          'Revoke background location access, microphone, and full contacts access.',
+          'Revoke background location access, address book contacts, and microphone permissions.',
           'Set location permission to "Only While Using App" or "Never".',
         ];
       case 'decommission_stale':
         return [
           `Log in to ${action.accountName} and navigate to "Privacy / Account Management".`,
-          'Request permanent account deletion and data wipe.',
-          'Unlink any associated OAuth authorizations and delete saved payment methods.',
+          'Submit a formal GDPR / CCPA right-to-be-forgotten deletion and wipe request.',
+          'Revoke all associated OAuth tokens and delete stored credit cards or billing profiles.',
         ];
       default:
         return ['Follow the security recommendations to mitigate exposure.'];
@@ -122,39 +170,48 @@ export const FixChecklist: React.FC<FixChecklistProps> = ({
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      {/* Progress & Ranking Hero Card */}
+      {/* Hero Header: Marginal Risk Reduction (ΔRisk) Engine */}
       <div className="glass-panel" style={{ padding: '24px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16 }}>
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span className="badge badge-cyan">
-                <Sparkles size={12} /> Requirement 3: Marginal Risk Reduction Ranking (ΔRisk)
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 16 }}>
+          <div style={{ maxWidth: '720px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+              <span className="badge badge-cyan" style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                <Sparkles size={13} /> USP 2: Marginal Risk Reduction (ΔRisk) Ranking
+              </span>
+              <span className="badge" style={{ background: 'rgba(16, 185, 129, 0.15)', color: '#10b981', border: '1px solid rgba(16, 185, 129, 0.3)' }}>
+                Counterfactual Simulation Engine
               </span>
             </div>
-            <h2 style={{ fontSize: '1.4rem', marginTop: 6 }}>Prioritized Remediation Queue</h2>
-            <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', maxWidth: '650px' }}>
-              Every fix is scored by counterfactual network simulation: evaluating how many downstream attack paths are severed when the safeguard is applied.
+            <h2 style={{ fontSize: '1.45rem', fontWeight: 700 }}>
+              Prioritized Remediation Queue (Max ROI First)
+            </h2>
+            <p style={{ fontSize: '0.86rem', color: 'var(--text-secondary)', marginTop: 6, lineHeight: 1.5 }}>
+              Instead of 50+ unranked alerts, fixes are mathematically ordered by their exact marginal risk delta (<strong style={{ color: '#fff' }}>ΔRisk</strong>). We simulate graph cut outcomes to measure how many lateral takeover paths are severed before recommending any action.
             </p>
           </div>
 
-          {/* Quick-Wins CTA & Progress Widget */}
-          <div style={{ display: 'flex', gap: 14, alignItems: 'center', flexWrap: 'wrap' }}>
+          {/* 1-Click Multi-Fix CTA & Progress Tracker */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, minWidth: '260px' }}>
             {pendingActions.length > 0 && (
               <button
                 onClick={handleApplyTop3QuickWins}
                 className="btn-primary"
-                style={{ background: 'linear-gradient(135deg, #06b6d4 0%, #10b981 100%)' }}
+                style={{
+                  background: 'linear-gradient(135deg, #06b6d4 0%, #10b981 100%)',
+                  boxShadow: '0 4px 14px rgba(6, 182, 212, 0.3)',
+                  padding: '10px 18px',
+                }}
               >
-                <Zap size={16} /> 1-Click Resolve Top 3 Fixes
+                <Zap size={16} /> 1-Click Apply Top 3 High-ROI Fixes
               </button>
             )}
 
-            <div style={{ minWidth: '220px', background: 'rgba(255, 255, 255, 0.03)', padding: '14px 18px', borderRadius: 'var(--radius-lg)', border: '1px solid var(--border-subtle)' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', marginBottom: 6 }}>
-                <span style={{ color: 'var(--text-secondary)' }}>Remediation Progress:</span>
-                <strong style={{ color: '#10b981' }}>{completionPercentage}%</strong>
+            <div style={{ background: 'rgba(255, 255, 255, 0.03)', padding: '12px 16px', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-subtle)' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', marginBottom: 6 }}>
+                <span style={{ color: 'var(--text-secondary)' }}>Footprint Remediation:</span>
+                <strong style={{ color: '#10b981' }}>{completionPercentage}% Done</strong>
               </div>
-              <div style={{ width: '100%', height: '8px', background: 'rgba(255, 255, 255, 0.1)', borderRadius: '4px', overflow: 'hidden' }}>
+              <div style={{ width: '100%', height: '7px', background: 'rgba(255, 255, 255, 0.1)', borderRadius: '4px', overflow: 'hidden' }}>
                 <div
                   style={{
                     width: `${completionPercentage}%`,
@@ -165,23 +222,90 @@ export const FixChecklist: React.FC<FixChecklistProps> = ({
                 />
               </div>
               <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: 6, display: 'flex', justifyContent: 'space-between' }}>
-                <span>{completedCount} of {totalActions} fixes completed</span>
-                {potentialScoreJump > 0 && (
-                  <span style={{ color: '#38bdf8' }}>+{potentialScoreJump} Pts Possible</span>
-                )}
+                <span>{completedCount} of {totalActions} fixes resolved</span>
+                <span style={{ color: '#38bdf8' }}>{totalSeveredVectors} takeover paths total</span>
               </div>
             </div>
           </div>
         </div>
 
+        {/* Pareto Frontier / Diminishing Returns Visualizer */}
+        {pendingActions.length > 0 && (
+          <div style={{ marginTop: 20, paddingTop: 16, borderTop: '1px solid var(--border-subtle)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <Activity size={16} style={{ color: '#06b6d4' }} />
+                <span style={{ fontSize: '0.85rem', fontWeight: 600, color: '#f8fafc' }}>
+                  Pareto Efficiency Frontier: Top 3 Fixes Eliminate ~{top3CumulativeReductionPct}% of Total Network Risk
+                </span>
+              </div>
+              <button
+                onClick={() => setShowParetoDetails(!showParetoDetails)}
+                style={{
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'var(--text-muted)',
+                  cursor: 'pointer',
+                  fontSize: '0.75rem',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 4,
+                }}
+              >
+                {showParetoDetails ? 'Hide Curve' : 'Show Curve'}
+                {showParetoDetails ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+              </button>
+            </div>
+
+            {showParetoDetails && (
+              <div
+                style={{
+                  background: 'rgba(6, 182, 212, 0.04)',
+                  border: '1px solid rgba(6, 182, 212, 0.2)',
+                  borderRadius: 'var(--radius-md)',
+                  padding: '14px 18px',
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                  gap: 12,
+                }}
+              >
+                {pendingActions.slice(0, 4).map((action, idx) => (
+                  <div
+                    key={action.id}
+                    style={{
+                      background: idx === 0 ? 'rgba(244, 63, 94, 0.1)' : 'rgba(255, 255, 255, 0.02)',
+                      border: idx === 0 ? '1px solid rgba(244, 63, 94, 0.3)' : '1px solid var(--border-subtle)',
+                      borderRadius: 'var(--radius-sm)',
+                      padding: '10px 12px',
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.75rem' }}>
+                      <span style={{ color: 'var(--text-muted)' }}>Rank #{idx + 1} Fix</span>
+                      <span style={{ fontWeight: 700, color: idx === 0 ? '#f43f5e' : '#06b6d4' }}>
+                        -{action.relativeRiskReductionPercentage}% ΔRisk
+                      </span>
+                    </div>
+                    <div style={{ fontWeight: 600, fontSize: '0.82rem', color: '#fff', marginTop: 4, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {action.accountName}
+                    </div>
+                    <div style={{ fontSize: '0.7rem', color: 'var(--text-secondary)', marginTop: 2 }}>
+                      Severes {action.severedAttackPathsCount} lateral attack paths
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Category Filter Tabs */}
         <div style={{ display: 'flex', gap: 8, marginTop: 20, flexWrap: 'wrap' }}>
           {[
-            { id: 'ALL', label: `Pending Actions (${pendingActions.length})` },
+            { id: 'ALL', label: `All Pending (${pendingActions.length})` },
             { id: 'enable_2fa', label: '2FA Upgrades' },
             { id: 'isolate_password', label: 'Password Decoupling' },
             { id: 'revoke_permission', label: 'Permission Audits' },
-            { id: 'decommission_stale', label: 'Stale Account Deletion' },
+            { id: 'decommission_stale', label: 'Stale Account Cleanup' },
             { id: 'COMPLETED', label: `Resolved (${completedCount})` },
           ].map((cat) => (
             <button
@@ -205,18 +329,19 @@ export const FixChecklist: React.FC<FixChecklistProps> = ({
       </div>
 
       {/* Action Cards Queue */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
         {filteredActions.length === 0 ? (
           <div className="glass-panel" style={{ padding: '40px', textAlign: 'center', color: 'var(--text-secondary)' }}>
             <CheckCircle size={36} style={{ color: '#10b981', margin: '0 auto 12px' }} />
             <h3 style={{ fontSize: '1.1rem', color: '#fff' }}>No Pending Actions in this Category</h3>
-            <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-              All recommendations in this section have been resolved. Your network defense is significantly stronger!
+            <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginTop: 4 }}>
+              All recommendations in this filter have been executed. Your attack graph is thoroughly hardened!
             </p>
           </div>
         ) : (
           filteredActions.map((action, index) => {
             const isCompleted = completedActionIds.includes(action.id);
+            const isDiffExpanded = expandedDiffActionId === action.id;
 
             return (
               <div
@@ -225,81 +350,200 @@ export const FixChecklist: React.FC<FixChecklistProps> = ({
                 style={{
                   padding: '18px 22px',
                   display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: 16,
+                  flexDirection: 'column',
+                  gap: 12,
                   opacity: isCompleted ? 0.6 : 1,
-                  borderLeft: `4px solid ${
+                  borderLeft: `5px solid ${
                     isCompleted
                       ? '#10b981'
-                      : index === 0
+                      : action.roiTier === 'MAX_IMPACT'
                       ? '#f43f5e'
-                      : index < 3
-                      ? '#f97316'
+                      : action.roiTier === 'HIGH_ROI'
+                      ? '#f59e0b'
                       : 'var(--accent-cyan)'
                   }`,
                 }}
               >
-                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14 }}>
-                  <div
-                    style={{
-                      width: 40,
-                      height: 40,
-                      borderRadius: 'var(--radius-md)',
-                      background: 'rgba(255, 255, 255, 0.05)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      flexShrink: 0,
-                    }}
-                  >
-                    {getCategoryIcon(action.category)}
-                  </div>
+                {/* Main Action Row - Fixed Non-wrapping Right-aligned Actions */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 20, flexWrap: 'nowrap', width: '100%' }}>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', gap: 14, flex: 1, minWidth: 0 }}>
+                    <div
+                      style={{
+                        width: 42,
+                        height: 42,
+                        borderRadius: 'var(--radius-md)',
+                        background: 'rgba(255, 255, 255, 0.05)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
+                      }}
+                    >
+                      {getCategoryIcon(action.category)}
+                    </div>
 
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                      <h4 style={{ fontSize: '0.98rem', fontWeight: 600, color: isCompleted ? 'var(--text-muted)' : '#f8fafc' }}>
-                        {action.title}
-                      </h4>
-                      <span className="badge badge-cyan" style={{ fontSize: '0.72rem' }}>
-                        +{action.impactScore} Pts Security Delta
-                      </span>
-                      {index === 0 && !isCompleted && (
-                        <span className="badge badge-critical" style={{ fontSize: '0.7rem' }}>
-                          HIGHEST ROI FIX
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                        <h4 style={{ fontSize: '1.02rem', fontWeight: 600, color: isCompleted ? 'var(--text-muted)' : '#f8fafc' }}>
+                          {action.title}
+                        </h4>
+
+                        {/* Marginal Risk Reduction Highlight Badges */}
+                        <span
+                          className="badge"
+                          style={{
+                            ...getRoiBadgeStyle(action.roiTier),
+                            fontSize: '0.75rem',
+                            fontWeight: 700,
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 4,
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          <TrendingDown size={13} />
+                          ΔRisk: -{action.relativeRiskReductionPercentage}% (-{action.absoluteRiskReduction} units)
                         </span>
+
+                        <span className="badge badge-cyan" style={{ fontSize: '0.72rem', display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}>
+                          <GitFork size={12} />
+                          {action.severedAttackPathsCount} Paths Severed
+                        </span>
+                      </div>
+
+                      {/* Prominent Mathematical Rationale Banner */}
+                      <div
+                        style={{
+                          background: 'rgba(6, 182, 212, 0.06)',
+                          borderLeft: '3px solid var(--accent-cyan)',
+                          padding: '8px 12px',
+                          borderRadius: '0 var(--radius-sm) var(--radius-sm) 0',
+                          marginTop: 8,
+                          fontSize: '0.83rem',
+                          color: '#e2e8f0',
+                          fontStyle: 'italic',
+                          wordBreak: 'break-word',
+                        }}
+                      >
+                        "{action.mathematicalProofRationale}"
+                      </div>
+
+                      {/* Protected Downstream Targets Preview */}
+                      {action.severedTargetAccounts && action.severedTargetAccounts.length > 0 && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+                          <span style={{ fontSize: '0.74rem', color: 'var(--text-muted)' }}>Directly protects:</span>
+                          {action.severedTargetAccounts.map((tgt) => (
+                            <span
+                              key={tgt}
+                              style={{
+                                fontSize: '0.7rem',
+                                background: 'rgba(255, 255, 255, 0.06)',
+                                border: '1px solid rgba(255, 255, 255, 0.1)',
+                                padding: '1px 7px',
+                                borderRadius: 'var(--radius-full)',
+                                color: '#94a3b8',
+                              }}
+                            >
+                              {tgt}
+                            </span>
+                          ))}
+                        </div>
                       )}
                     </div>
-                    <p style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', marginTop: 4, maxWidth: '780px' }}>
-                      {action.description}
-                    </p>
+                  </div>
+
+                  {/* Right Action Controls - Guaranteed Right Alignment */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, marginLeft: 'auto' }}>
+                    <button
+                      onClick={() => setExpandedDiffActionId(isDiffExpanded ? null : action.id)}
+                      className="btn-secondary btn-sm"
+                      title="Inspect Counterfactual Before vs After Diff"
+                      style={{ fontSize: '0.78rem', whiteSpace: 'nowrap' }}
+                    >
+                      {isDiffExpanded ? 'Hide Simulation' : 'Counterfactual Diff'}
+                    </button>
+
+                    <button
+                      onClick={() => setActiveGuideAction(action)}
+                      className="btn-secondary btn-sm"
+                      title="View Step-by-Step Fix Guidance"
+                      style={{ whiteSpace: 'nowrap' }}
+                    >
+                      <Info size={14} /> Guide
+                    </button>
+
+                    {isCompleted ? (
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#10b981', fontSize: '0.85rem', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                        <Check size={16} /> Resolved
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() => handleFixClick(action)}
+                        className="btn-primary btn-sm"
+                        style={{
+                          whiteSpace: 'nowrap',
+                          background: index === 0 ? 'linear-gradient(135deg, #f43f5e 0%, #ec4899 100%)' : undefined,
+                        }}
+                      >
+                        <Zap size={14} /> Apply Fix Now
+                      </button>
+                    )}
                   </div>
                 </div>
 
-                {/* Actions & Guide Trigger */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
-                  <button
-                    onClick={() => setActiveGuideAction(action)}
-                    className="btn-secondary btn-sm"
-                    title="View Step-by-Step Fix Guidance"
+                {/* Counterfactual Diff Accordion */}
+                {isDiffExpanded && action.counterfactual && (
+                  <div
+                    style={{
+                      background: 'rgba(15, 23, 42, 0.8)',
+                      border: '1px solid var(--border-subtle)',
+                      borderRadius: 'var(--radius-md)',
+                      padding: '14px 18px',
+                      marginTop: 6,
+                    }}
                   >
-                    <Info size={14} /> Guide
-                  </button>
+                    <div style={{ fontSize: '0.8rem', fontWeight: 700, color: 'var(--accent-cyan)', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                      Counterfactual Graph State Simulation (Before vs After Fix)
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))', gap: 10 }}>
+                      <div style={{ background: 'rgba(255, 255, 255, 0.02)', padding: '8px 12px', borderRadius: 'var(--radius-sm)' }}>
+                        <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Global Network Risk</div>
+                        <div style={{ fontSize: '0.9rem', fontWeight: 700, marginTop: 2 }}>
+                          <span style={{ color: '#f43f5e' }}>{action.counterfactual.beforeGlobalRisk}</span>
+                          {' ➔ '}
+                          <span style={{ color: '#10b981' }}>{action.counterfactual.afterGlobalRisk}</span>
+                        </div>
+                      </div>
 
-                  {isCompleted ? (
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 6, color: '#10b981', fontSize: '0.85rem', fontWeight: 600 }}>
-                      <CheckCircle size={16} /> Resolved
-                    </span>
-                  ) : (
-                    <button
-                      onClick={() => handleFixClick(action)}
-                      className="btn-primary btn-sm"
-                      style={{ whiteSpace: 'nowrap' }}
-                    >
-                      <Zap size={14} /> Apply Fix Now
-                    </button>
-                  )}
-                </div>
+                      <div style={{ background: 'rgba(255, 255, 255, 0.02)', padding: '8px 12px', borderRadius: 'var(--radius-sm)' }}>
+                        <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Privacy Score</div>
+                        <div style={{ fontSize: '0.9rem', fontWeight: 700, marginTop: 2 }}>
+                          <span style={{ color: '#94a3b8' }}>{action.counterfactual.beforeScore}</span>
+                          {' ➔ '}
+                          <span style={{ color: '#10b981' }}>+{action.counterfactual.afterScore - action.counterfactual.beforeScore} pts</span>
+                        </div>
+                      </div>
+
+                      <div style={{ background: 'rgba(255, 255, 255, 0.02)', padding: '8px 12px', borderRadius: 'var(--radius-sm)' }}>
+                        <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Single Points of Failure</div>
+                        <div style={{ fontSize: '0.9rem', fontWeight: 700, marginTop: 2 }}>
+                          <span style={{ color: '#f43f5e' }}>{action.counterfactual.beforeSPOFCount}</span>
+                          {' ➔ '}
+                          <span style={{ color: '#10b981' }}>{action.counterfactual.afterSPOFCount}</span>
+                        </div>
+                      </div>
+
+                      <div style={{ background: 'rgba(255, 255, 255, 0.02)', padding: '8px 12px', borderRadius: 'var(--radius-sm)' }}>
+                        <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>Node Blast Radius</div>
+                        <div style={{ fontSize: '0.9rem', fontWeight: 700, marginTop: 2 }}>
+                          <span style={{ color: '#f59e0b' }}>{action.counterfactual.beforeBlastRadius} targets</span>
+                          {' ➔ '}
+                          <span style={{ color: '#10b981' }}>{action.counterfactual.afterBlastRadius}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })
@@ -316,7 +560,7 @@ export const FixChecklist: React.FC<FixChecklistProps> = ({
                   <Shield size={20} />
                 </div>
                 <div>
-                  <h3 style={{ fontSize: '1.15rem' }}>Remediation Walkthrough</h3>
+                  <h3 style={{ fontSize: '1.15rem' }}>Remediation Walkthrough & Math Proof</h3>
                   <p style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>{activeGuideAction.title}</p>
                 </div>
               </div>
@@ -330,11 +574,11 @@ export const FixChecklist: React.FC<FixChecklistProps> = ({
 
             <div style={{ padding: '24px' }}>
               <div className="glass-panel" style={{ padding: '14px 18px', marginBottom: 18, background: 'rgba(6, 182, 212, 0.08)', border: '1px solid rgba(6, 182, 212, 0.25)' }}>
-                <div style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--accent-cyan)' }}>
-                  Security Impact: +{activeGuideAction.impactScore} Points Risk Reduction
+                <div style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--accent-cyan)' }}>
+                  Marginal ROI: -{activeGuideAction.relativeRiskReductionPercentage}% Total Network Risk (-{activeGuideAction.absoluteRiskReduction} points)
                 </div>
-                <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: 4 }}>
-                  {activeGuideAction.description}
+                <p style={{ fontSize: '0.82rem', color: '#f1f5f9', marginTop: 4, fontStyle: 'italic' }}>
+                  "{activeGuideAction.mathematicalProofRationale}"
                 </p>
               </div>
 
@@ -370,3 +614,4 @@ export const FixChecklist: React.FC<FixChecklistProps> = ({
     </div>
   );
 };
+

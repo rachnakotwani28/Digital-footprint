@@ -36,6 +36,10 @@ export interface PasswordCluster {
   description?: string;
 }
 
+export type IdentityTier = 'tier1_vault' | 'tier2_work' | 'tier3_disposable';
+
+export type AliasProvider = 'icloud_relay' | 'simplelogin' | 'duckduckgo' | 'proton_alias' | 'custom_burner';
+
 export interface Account {
   id: string;
   name: string;
@@ -53,6 +57,9 @@ export interface Account {
   lastBreachDate?: string;
   sensitivityWeight: number; // 1 to 10 (Finance = 10, Primary Email = 10, Forum = 2)
   lastActivityDate: string; // ISO date string
+  identityTier?: IdentityTier; // Tier 1 (Vault), Tier 2 (Daily/Work), Tier 3 (Burner/Disposable)
+  isMaskedAlias?: boolean; // True if using a relayed burner alias (e.g. SimpleLogin / iCloud Hide My Email)
+  aliasProvider?: AliasProvider;
   isDecommissioned?: boolean;
   notes?: string;
 }

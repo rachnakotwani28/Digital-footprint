@@ -12,6 +12,7 @@ export interface RiskMetrics {
   reusedPasswordAccountsCount: number;
   missing2FACount: number;
   highRiskPermissionsCount: number;
+  totalNetworkRiskScore: number; // Aggregate raw sum of effective risks across graph
   tierBreakdown: Record<RiskTier, number>;
 }
 
@@ -22,6 +23,19 @@ export type RemediationCategory =
   | 'revoke_permission'
   | 'decommission_stale';
 
+export type ROITier = 'MAX_IMPACT' | 'HIGH_ROI' | 'MODERATE' | 'TACTICAL';
+
+export interface CounterfactualComparison {
+  beforeGlobalRisk: number;
+  afterGlobalRisk: number;
+  beforeScore: number;
+  afterScore: number;
+  beforeSPOFCount: number;
+  afterSPOFCount: number;
+  beforeBlastRadius: number;
+  afterBlastRadius: number;
+}
+
 export interface RemediationAction {
   id: string;
   accountId: string;
@@ -29,9 +43,16 @@ export interface RemediationAction {
   category: RemediationCategory;
   title: string;
   description: string;
-  impactScore: number; // Marginal Risk Delta (Points removed from global risk)
+  impactScore: number; // Marginal Risk Delta points removed from global privacy score (0-100)
+  absoluteRiskReduction: number; // Exact drop in aggregate network risk sum
+  relativeRiskReductionPercentage: number; // % of total global network risk removed (e.g. 48%)
+  severedAttackPathsCount: number; // Number of lateral takeover vectors broken
+  severedTargetAccounts: string[]; // Names of downstream accounts protected by this fix
+  roiTier: ROITier;
   difficulty: 'Easy' | 'Moderate' | 'Advanced';
   isCompleted: boolean;
+  mathematicalProofRationale: string;
+  counterfactual: CounterfactualComparison;
   actionPayload?: {
     permissionToRevoke?: string;
     suggestedNewCluster?: string;

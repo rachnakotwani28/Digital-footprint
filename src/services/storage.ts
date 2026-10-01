@@ -1,10 +1,12 @@
 import type { Account, PasswordCluster } from '../types/account';
+import type { RemediationAction } from '../types/risk';
 import { INITIAL_ACCOUNTS, INITIAL_PASSWORD_CLUSTERS } from './seedData';
 
 const ACCOUNTS_STORAGE_KEY = 'auditor4_accounts_v1';
 const CLUSTERS_STORAGE_KEY = 'auditor4_clusters_v1';
 const HISTORY_STORAGE_KEY = 'auditor4_history_v1';
 const COMPLETED_ACTIONS_KEY = 'auditor4_completed_actions_v1';
+const COMPLETED_ACTIONS_RECORDS_KEY = 'auditor4_completed_action_records_v1';
 
 export interface ScoreHistoryPoint {
   date: string;
@@ -60,6 +62,29 @@ export function saveStoredClusters(clusters: PasswordCluster[]): void {
   }
 }
 
+export function loadCompletedActions(): RemediationAction[] {
+  try {
+    const raw = localStorage.getItem(COMPLETED_ACTIONS_RECORDS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch (e) {
+    console.error('Failed to load completed actions:', e);
+  }
+  return [];
+}
+
+export function saveCompletedActions(actions: RemediationAction[]): void {
+  try {
+    localStorage.setItem(COMPLETED_ACTIONS_RECORDS_KEY, JSON.stringify(actions));
+    // Also sync IDs for backward compatibility
+    saveCompletedActionIds(actions.map((a) => a.id));
+  } catch (e) {
+    console.error('Failed to save completed actions:', e);
+  }
+}
+
 export function loadCompletedActionIds(): string[] {
   try {
     const raw = localStorage.getItem(COMPLETED_ACTIONS_KEY);
@@ -110,5 +135,6 @@ export function resetToSeedData(): { accounts: Account[]; clusters: PasswordClus
   saveStoredAccounts(INITIAL_ACCOUNTS);
   saveStoredClusters(INITIAL_PASSWORD_CLUSTERS);
   saveCompletedActionIds([]);
+  saveCompletedActions([]);
   return { accounts: INITIAL_ACCOUNTS, clusters: INITIAL_PASSWORD_CLUSTERS };
 }

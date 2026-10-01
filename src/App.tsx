@@ -11,6 +11,8 @@ import {
   saveStoredClusters, 
   loadCompletedActionIds, 
   saveCompletedActionIds, 
+  loadCompletedActions,
+  saveCompletedActions,
   loadScoreHistory, 
   saveScoreHistory, 
   resetToSeedData,
@@ -44,6 +46,7 @@ export const App: React.FC = () => {
   const [accounts, setAccounts] = useState<Account[]>(() => loadStoredAccounts());
   const [clusters, setClusters] = useState<PasswordCluster[]>(() => loadStoredClusters());
   const [completedActionIds, setCompletedActionIds] = useState<string[]>(() => loadCompletedActionIds());
+  const [completedActions, setCompletedActions] = useState<RemediationAction[]>(() => loadCompletedActions());
   const [scoreHistory, setScoreHistory] = useState<ScoreHistoryPoint[]>(() => loadScoreHistory());
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [layoutMode, setLayoutMode] = useState<LayoutMode>('concentric');
@@ -107,9 +110,18 @@ export const App: React.FC = () => {
 
     handleUpdateAccounts(updatedAccounts);
 
-    const newCompleted = [...completedActionIds, action.id];
-    setCompletedActionIds(newCompleted);
-    saveCompletedActionIds(newCompleted);
+    const newCompletedIds = Array.from(new Set([...completedActionIds, action.id]));
+    setCompletedActionIds(newCompletedIds);
+    saveCompletedActionIds(newCompletedIds);
+
+    const resolvedRecord: RemediationAction = {
+      ...action,
+      isCompleted: true,
+      completedAt: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+    };
+    const updatedCompletedList = [resolvedRecord, ...completedActions.filter((c) => c.id !== action.id)];
+    setCompletedActions(updatedCompletedList);
+    saveCompletedActions(updatedCompletedList);
 
     // Compute updated score and record in history
     const rawNet = buildExposureNetwork(updatedAccounts, layoutMode);
@@ -132,6 +144,7 @@ export const App: React.FC = () => {
       setAccounts(resetAccs);
       setClusters(resetClust);
       setCompletedActionIds([]);
+      setCompletedActions([]);
       setSelectedNodeId(null);
     }
   };
@@ -305,6 +318,7 @@ export const App: React.FC = () => {
         {activeTab === 'checklist' && (
           <FixChecklist
             actions={prioritizedActions}
+            completedActions={completedActions}
             completedActionIds={completedActionIds}
             onApplyFix={handleApplyFix}
           />

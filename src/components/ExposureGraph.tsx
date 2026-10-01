@@ -36,17 +36,33 @@ export const ExposureGraph: React.FC<ExposureGraphProps> = ({
 
   // Attack Path Finder Mode State
   const [pathFinderActive, setPathFinderActive] = useState(false);
-  const [pathSourceId, setPathSourceId] = useState<string>('acc_old_gaming_forum');
+  const [pathSourceId, setPathSourceId] = useState<string>('acc_google_primary');
   const [pathTargetId, setPathTargetId] = useState<string>('acc_chase_bank');
 
   const { nodes, edges } = network;
   const selectedNode = nodes.find((n) => n.id === selectedNodeId) || null;
 
+  // Safe fallback source and target IDs
+  const effectiveSourceId = useMemo(() => {
+    if (nodes.some((n) => n.id === pathSourceId)) return pathSourceId;
+    const found = nodes.find((n) => n.account.knownBreachesCount > 0 || !n.account.has2FA) || nodes[0];
+    return found ? found.id : '';
+  }, [nodes, pathSourceId]);
+
+  const effectiveTargetId = useMemo(() => {
+    if (nodes.some((n) => n.id === pathTargetId && n.id !== effectiveSourceId)) return pathTargetId;
+    const found =
+      nodes.find((n) => n.account.sensitivityWeight >= 8 && n.id !== effectiveSourceId) ||
+      nodes.find((n) => n.id !== effectiveSourceId) ||
+      nodes[nodes.length - 1];
+    return found ? found.id : '';
+  }, [nodes, pathTargetId, effectiveSourceId]);
+
   // Compute Attack Path if path finder is enabled
   const calculatedAttackPath = useMemo(() => {
-    if (!pathFinderActive || !pathSourceId || !pathTargetId) return null;
-    return findAttackPath(pathSourceId, pathTargetId, network);
-  }, [pathFinderActive, pathSourceId, pathTargetId, network]);
+    if (!pathFinderActive || !effectiveSourceId || !effectiveTargetId) return null;
+    return findAttackPath(effectiveSourceId, effectiveTargetId, network);
+  }, [pathFinderActive, effectiveSourceId, effectiveTargetId, network]);
 
   const pathNodeSet = useMemo(() => {
     return new Set(calculatedAttackPath ? calculatedAttackPath.nodes : []);
@@ -95,33 +111,71 @@ export const ExposureGraph: React.FC<ExposureGraphProps> = ({
   };
 
   const getEdgeStyle = (edge: GraphEdge) => {
-    const isPathEdge = pathEdgeSet.has(edge.id);
+    const isPathEdge = pathFinderActive && pathEdgeSet.has(edge.id);
     const isSelectedChain =
       selectedNodeId && (edge.source === selectedNodeId || edge.target === selectedNodeId);
     const isHoverChain =
       hoveredNodeId && (edge.source === hoveredNodeId || edge.target === hoveredNodeId);
 
+    // If Attack Path Tracer is active
+    if (pathFinderActive) {
+      if (isPathEdge) {
+        return {
+          stroke: '#ec4899', // Vibrant Hot Pink for Attack Path
+          strokeDasharray: 'none',
+          strokeWidth: 4.5,
+          opacity: 1,
+          isPathEdge: true,
+          markerId: 'url(#arrow-attack)',
+          filter: 'url(#glow-attack)',
+        };
+      } else {
+        return {
+          stroke: '#334155', // Greyed out non-path edge
+          strokeDasharray: edge.relationType === 'RECOVERY_CHANNEL' ? '5,4' : edge.relationType === 'PASSWORD_REUSE' ? '2,3' : 'none',
+          strokeWidth: 1.2,
+          opacity: 0.12,
+          isPathEdge: false,
+          markerId: 'url(#arrow-grey)',
+          filter: undefined,
+        };
+      }
+    }
+
+    // Normal mode (non path-finder)
     let stroke = 'rgba(148, 163, 184, 0.2)';
     let strokeDasharray = 'none';
     let strokeWidth = 1.5;
+    let markerId = 'url(#arrow-sso)';
 
-    if (isPathEdge) {
-      stroke = '#ec4899'; // Neon Pink for Attack Path
-      strokeWidth = 3.5;
-    } else if (edge.relationType === 'SSO_AUTH') {
+    if (edge.relationType === 'SSO_AUTH') {
       stroke = isSelectedChain || isHoverChain ? '#38bdf8' : 'rgba(56, 189, 248, 0.35)';
       strokeWidth = isSelectedChain || isHoverChain ? 2.8 : 1.8;
+      markerId = 'url(#arrow-sso)';
     } else if (edge.relationType === 'RECOVERY_CHANNEL') {
       stroke = isSelectedChain || isHoverChain ? '#fbbf24' : 'rgba(251, 191, 36, 0.35)';
       strokeDasharray = '5,4';
       strokeWidth = isSelectedChain || isHoverChain ? 2.8 : 1.8;
+      markerId = 'url(#arrow-recovery)';
     } else if (edge.relationType === 'PASSWORD_REUSE') {
       stroke = isSelectedChain || isHoverChain ? '#f43f5e' : 'rgba(244, 63, 94, 0.35)';
       strokeDasharray = '2,3';
       strokeWidth = isSelectedChain || isHoverChain ? 2.8 : 1.5;
+      markerId = 'url(#arrow-pwd)';
     }
 
-    return { stroke, strokeDasharray, strokeWidth, isPathEdge };
+    const isHoverDimmed =
+      connectedToHover && !connectedToHover.has(edge.source) && !connectedToHover.has(edge.target);
+
+    return {
+      stroke,
+      strokeDasharray,
+      strokeWidth,
+      opacity: isHoverDimmed ? 0.15 : 1,
+      isPathEdge: false,
+      markerId,
+      filter: undefined,
+    };
   };
 
   return (
@@ -291,7 +345,7 @@ export const ExposureGraph: React.FC<ExposureGraphProps> = ({
             <select
               className="form-control"
               style={{ padding: '4px 8px', fontSize: '0.78rem', flex: 1 }}
-              value={pathSourceId}
+              value={effectiveSourceId}
               onChange={(e) => setPathSourceId(e.target.value)}
             >
               {nodes.map((n) => (
@@ -307,7 +361,7 @@ export const ExposureGraph: React.FC<ExposureGraphProps> = ({
             <select
               className="form-control"
               style={{ padding: '4px 8px', fontSize: '0.78rem', flex: 1 }}
-              value={pathTargetId}
+              value={effectiveTargetId}
               onChange={(e) => setPathTargetId(e.target.value)}
             >
               {nodes.map((n) => (
@@ -320,8 +374,8 @@ export const ExposureGraph: React.FC<ExposureGraphProps> = ({
 
           <div>
             {calculatedAttackPath ? (
-              <span className="badge badge-critical" style={{ fontSize: '0.75rem' }}>
-                <AlertTriangle size={12} /> Direct Compromise Path Found ({calculatedAttackPath.edges.length} Hops)
+              <span className="badge badge-critical" style={{ fontSize: '0.75rem', background: 'rgba(236, 72, 153, 0.25)', borderColor: '#ec4899', color: '#f472b6' }}>
+                <AlertTriangle size={12} /> Direct Compromise Path Found ({calculatedAttackPath.edges.length} {calculatedAttackPath.edges.length === 1 ? 'Hop' : 'Hops'})
               </span>
             ) : (
               <span className="badge badge-low" style={{ fontSize: '0.75rem' }}>
@@ -352,12 +406,15 @@ export const ExposureGraph: React.FC<ExposureGraphProps> = ({
           <marker id="arrow-pwd" viewBox="0 0 10 10" refX="28" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
             <path d="M 0 0 L 10 5 L 0 10 z" fill="#f43f5e" />
           </marker>
-          <marker id="arrow-attack" viewBox="0 0 10 10" refX="28" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+          <marker id="arrow-attack" viewBox="0 0 10 10" refX="28" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
             <path d="M 0 0 L 10 5 L 0 10 z" fill="#ec4899" />
           </marker>
+          <marker id="arrow-grey" viewBox="0 0 10 10" refX="28" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M 0 0 L 10 5 L 0 10 z" fill="#475569" />
+          </marker>
 
-          <filter id="glow-attack" x="-30%" y="-30%" width="160%" height="160%">
-            <feGaussianBlur stdDeviation="6" result="blur" />
+          <filter id="glow-attack" x="-40%" y="-40%" width="180%" height="180%">
+            <feGaussianBlur stdDeviation="8" result="blur" />
             <feComposite in="SourceGraphic" in2="blur" operator="over" />
           </filter>
         </defs>
@@ -366,58 +423,128 @@ export const ExposureGraph: React.FC<ExposureGraphProps> = ({
           transform={`translate(${panOffset.x}, ${panOffset.y}) scale(${zoomLevel})`}
           style={{ transformOrigin: '500px 380px', transition: 'transform 0.25s ease' }}
         >
-          {/* Directed Graph Edges */}
-          {visibleEdges.map((edge) => {
-            const sourceNode = nodes.find((n) => n.id === edge.source);
-            const targetNode = nodes.find((n) => n.id === edge.target);
-            if (!sourceNode || !targetNode) return null;
+          {/* Background / Non-Path Directed Graph Edges */}
+          {visibleEdges
+            .filter((edge) => !pathFinderActive || !pathEdgeSet.has(edge.id))
+            .map((edge) => {
+              const sourceNode = nodes.find((n) => n.id === edge.source);
+              const targetNode = nodes.find((n) => n.id === edge.target);
+              if (!sourceNode || !targetNode) return null;
 
-            const x1 = sourceNode.x || 500;
-            const y1 = sourceNode.y || 380;
-            const x2 = targetNode.x || 500;
-            const y2 = targetNode.y || 380;
+              const x1 = sourceNode.x || 500;
+              const y1 = sourceNode.y || 380;
+              const x2 = targetNode.x || 500;
+              const y2 = targetNode.y || 380;
 
-            const style = getEdgeStyle(edge);
-            const isDimmed =
-              connectedToHover &&
-              !connectedToHover.has(edge.source) &&
-              !connectedToHover.has(edge.target);
+              const style = getEdgeStyle(edge);
 
-            const markerId = style.isPathEdge
-              ? 'url(#arrow-attack)'
-              : edge.relationType === 'SSO_AUTH'
-              ? 'url(#arrow-sso)'
-              : edge.relationType === 'RECOVERY_CHANNEL'
-              ? 'url(#arrow-recovery)'
-              : 'url(#arrow-pwd)';
+              return (
+                <g key={edge.id} opacity={style.opacity}>
+                  <line
+                    x1={x1}
+                    y1={y1}
+                    x2={x2}
+                    y2={y2}
+                    stroke={style.stroke}
+                    strokeWidth={style.strokeWidth}
+                    strokeDasharray={style.strokeDasharray}
+                    markerEnd={style.markerId}
+                    filter={style.filter}
+                  />
+                </g>
+              );
+            })}
 
-            return (
-              <g key={edge.id} opacity={isDimmed ? 0.15 : 1}>
-                <line
-                  x1={x1}
-                  y1={y1}
-                  x2={x2}
-                  y2={y2}
-                  stroke={style.stroke}
-                  strokeWidth={style.strokeWidth}
-                  strokeDasharray={style.strokeDasharray}
-                  markerEnd={markerId}
-                  filter={style.isPathEdge ? 'url(#glow-attack)' : undefined}
-                />
-              </g>
-            );
-          })}
+          {/* Glowing Highlighted Attack Path Edges (Foreground) */}
+          {pathFinderActive &&
+            calculatedAttackPath &&
+            calculatedAttackPath.edges.map((edge) => {
+              const sourceNode = nodes.find((n) => n.id === edge.source);
+              const targetNode = nodes.find((n) => n.id === edge.target);
+              if (!sourceNode || !targetNode) return null;
+
+              const x1 = sourceNode.x || 500;
+              const y1 = sourceNode.y || 380;
+              const x2 = targetNode.x || 500;
+              const y2 = targetNode.y || 380;
+
+              return (
+                <g key={`path_edge_${edge.id}`}>
+                  {/* Neon Glow Outer Aura */}
+                  <line
+                    x1={x1}
+                    y1={y1}
+                    x2={x2}
+                    y2={y2}
+                    stroke="#ec4899"
+                    strokeWidth={10}
+                    opacity={0.45}
+                    filter="url(#glow-attack)"
+                  />
+                  {/* Solid High-Contrast Pink Vector Core */}
+                  <line
+                    x1={x1}
+                    y1={y1}
+                    x2={x2}
+                    y2={y2}
+                    stroke="#ec4899"
+                    strokeWidth={4.5}
+                    opacity={1}
+                    markerEnd="url(#arrow-attack)"
+                  />
+                  {/* Animated Flowing Energy Particle Dash */}
+                  <line
+                    x1={x1}
+                    y1={y1}
+                    x2={x2}
+                    y2={y2}
+                    stroke="#ffffff"
+                    strokeWidth={2.5}
+                    strokeDasharray="8,10"
+                    opacity={0.9}
+                  >
+                    <animate
+                      attributeName="stroke-dashoffset"
+                      from="36"
+                      to="0"
+                      dur="1s"
+                      repeatCount="indefinite"
+                    />
+                  </line>
+                </g>
+              );
+            })}
 
           {/* Graph Nodes */}
           {nodes.map((node) => {
             const isSelected = node.id === selectedNodeId;
             const isHovered = node.id === hoveredNodeId;
-            const isPathNode = pathNodeSet.has(node.id);
-            const isDimmed = connectedToHover && !connectedToHover.has(node.id);
+            const isPathNode = pathFinderActive && pathNodeSet.has(node.id);
+            const isPathDimmed = pathFinderActive && !isPathNode;
+            const isHoverDimmed = !pathFinderActive && connectedToHover && !connectedToHover.has(node.id);
+            const isDimmed = isPathDimmed || isHoverDimmed;
 
             const cx = node.x || 500;
             const cy = node.y || 380;
-            const nodeColor = isPathNode ? '#ec4899' : getNodeColor(node.riskTier);
+
+            const nodeColor = isPathNode
+              ? '#ec4899'
+              : isPathDimmed
+              ? '#475569'
+              : getNodeColor(node.riskTier);
+
+            const circleFill = isPathNode ? '#26132f' : '#0f172a';
+            const strokeWidth = isPathNode ? 3.5 : isSelected || isHovered ? 3 : 2;
+            const dropShadow = isPathNode
+              ? 'drop-shadow(0 0 16px #ec4899)'
+              : isSelected
+              ? `drop-shadow(0 0 10px ${nodeColor})`
+              : 'none';
+
+            // Find step order on attack path if active
+            const pathIndex = calculatedAttackPath ? calculatedAttackPath.nodes.indexOf(node.id) : -1;
+            const isPathSource = pathIndex === 0;
+            const isPathTarget = calculatedAttackPath && pathIndex === calculatedAttackPath.nodes.length - 1;
 
             return (
               <g
@@ -426,11 +553,11 @@ export const ExposureGraph: React.FC<ExposureGraphProps> = ({
                 onClick={() => onSelectNode(isSelected ? null : node.id)}
                 onMouseEnter={() => setHoveredNodeId(node.id)}
                 onMouseLeave={() => setHoveredNodeId(null)}
-                opacity={isDimmed ? 0.2 : 1}
+                opacity={isDimmed ? 0.18 : 1}
                 style={{ cursor: 'pointer', transition: 'opacity 0.2s ease' }}
               >
                 {/* SPOF Pulsing Warning Ring */}
-                {node.isSPOF && (
+                {node.isSPOF && !isPathDimmed && (
                   <circle
                     r="34"
                     fill="none"
@@ -450,25 +577,26 @@ export const ExposureGraph: React.FC<ExposureGraphProps> = ({
                   </circle>
                 )}
 
-                {/* Selection / Attack Path Halo */}
+                {/* Selection / Attack Path Glowing Halo */}
                 {(isSelected || isPathNode) && (
                   <circle
-                    r="36"
+                    r="37"
                     fill="none"
                     stroke={isPathNode ? '#ec4899' : '#06b6d4'}
-                    strokeWidth="3"
-                    opacity="0.85"
+                    strokeWidth="3.5"
+                    opacity={isPathNode ? 1 : 0.85}
+                    filter={isPathNode ? 'url(#glow-attack)' : undefined}
                   />
                 )}
 
                 {/* Base Node Circle */}
                 <circle
                   r={node.isSPOF ? 26 : 22}
-                  fill="#0f172a"
+                  fill={circleFill}
                   stroke={nodeColor}
-                  strokeWidth={isSelected || isHovered || isPathNode ? 3 : 2}
+                  strokeWidth={strokeWidth}
                   style={{
-                    filter: isSelected || isPathNode ? `drop-shadow(0 0 10px ${nodeColor})` : 'none',
+                    filter: dropShadow,
                     transition: 'all 0.2s',
                   }}
                 />
@@ -477,10 +605,10 @@ export const ExposureGraph: React.FC<ExposureGraphProps> = ({
                 <circle
                   r={node.isSPOF ? 21 : 17}
                   fill="none"
-                  stroke={nodeColor}
+                  stroke={isPathDimmed ? '#334155' : nodeColor}
                   strokeWidth="3"
                   strokeDasharray={`${(node.effectiveRisk / 100) * 110} 110`}
-                  opacity="0.9"
+                  opacity={isPathDimmed ? 0.3 : 0.9}
                   transform="rotate(-90)"
                 />
 
@@ -488,7 +616,7 @@ export const ExposureGraph: React.FC<ExposureGraphProps> = ({
                 <text
                   textAnchor="middle"
                   dy="4"
-                  fill="#ffffff"
+                  fill={isPathDimmed ? '#64748b' : '#ffffff'}
                   fontSize={node.isSPOF ? '11px' : '10px'}
                   fontWeight="700"
                   fontFamily="JetBrains Mono, monospace"
@@ -500,29 +628,45 @@ export const ExposureGraph: React.FC<ExposureGraphProps> = ({
                 <text
                   textAnchor="middle"
                   dy="42"
-                  fill={isSelected ? '#38bdf8' : isPathNode ? '#f472b6' : '#e2e8f0'}
+                  fill={isPathNode ? '#f472b6' : isPathDimmed ? '#64748b' : isSelected ? '#38bdf8' : '#e2e8f0'}
                   fontSize="11px"
-                  fontWeight="600"
+                  fontWeight={isPathNode ? '700' : '600'}
                   fontFamily="Inter, sans-serif"
                 >
                   {node.name.length > 18 ? node.name.slice(0, 16) + '…' : node.name}
                 </text>
 
-                {/* SPOF or Crown Jewel Badge */}
-                {node.isSPOF ? (
-                  <g transform="translate(0, -32)">
-                    <rect x="-24" y="-8" width="48" height="15" rx="7" fill="#ef4444" />
-                    <text textAnchor="middle" dy="3" fill="#ffffff" fontSize="8.5px" fontWeight="800">
-                      SPOF
+                {/* Badges: Path Sequence or SPOF / Crown Jewel */}
+                {isPathNode ? (
+                  <g transform="translate(0, -33)">
+                    <rect
+                      x={isPathSource || isPathTarget ? -36 : -24}
+                      y="-8"
+                      width={isPathSource || isPathTarget ? 72 : 48}
+                      height="16"
+                      rx="8"
+                      fill="#ec4899"
+                    />
+                    <text textAnchor="middle" dy="3.5" fill="#ffffff" fontSize="8px" fontWeight="800">
+                      {isPathSource ? '💥 SOURCE' : isPathTarget ? '🎯 TARGET' : `HOP ${pathIndex + 1}`}
                     </text>
                   </g>
-                ) : node.account.sensitivityWeight >= 9 ? (
-                  <g transform="translate(0, -32)">
-                    <rect x="-28" y="-8" width="56" height="15" rx="7" fill="#8b5cf6" />
-                    <text textAnchor="middle" dy="3" fill="#ffffff" fontSize="8px" fontWeight="700">
-                      CROWN JEWEL
-                    </text>
-                  </g>
+                ) : !isPathDimmed ? (
+                  node.isSPOF ? (
+                    <g transform="translate(0, -32)">
+                      <rect x="-24" y="-8" width="48" height="15" rx="7" fill="#ef4444" />
+                      <text textAnchor="middle" dy="3" fill="#ffffff" fontSize="8.5px" fontWeight="800">
+                        SPOF
+                      </text>
+                    </g>
+                  ) : node.account.sensitivityWeight >= 9 ? (
+                    <g transform="translate(0, -32)">
+                      <rect x="-28" y="-8" width="56" height="15" rx="7" fill="#8b5cf6" />
+                      <text textAnchor="middle" dy="3" fill="#ffffff" fontSize="8px" fontWeight="700">
+                        CROWN JEWEL
+                      </text>
+                    </g>
+                  ) : null
                 ) : null}
               </g>
             );

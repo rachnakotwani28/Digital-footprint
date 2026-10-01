@@ -51,6 +51,7 @@ export interface RemediationAction {
   roiTier: ROITier;
   difficulty: 'Easy' | 'Moderate' | 'Advanced';
   isCompleted: boolean;
+  completedAt?: string;
   mathematicalProofRationale: string;
   counterfactual: CounterfactualComparison;
   actionPayload?: {
